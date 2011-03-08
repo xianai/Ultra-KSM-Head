@@ -889,9 +889,12 @@ void do_page_add_anon_rmap(struct page *page,
 			__inc_zone_page_state(page,
 					      NR_ANON_TRANSPARENT_HUGEPAGES);
 	}
-	if (unlikely(PageKsm(page)))
+#ifdef CONFIG_KSM
+	if (unlikely(PageKsm(page))) {
+		__inc_zone_page_state(page, NR_KSM_PAGES_SHARING);
 		return;
-
+	}
+#endif
 	VM_BUG_ON(!PageLocked(page));
 	VM_BUG_ON(address < vma->vm_start || address >= vma->vm_end);
 	if (first)
@@ -949,6 +952,10 @@ void page_add_file_rmap(struct page *page)
  */
 void page_remove_rmap(struct page *page)
 {
+#ifdef CONFIG_KSM
+	if (PageKsm(page))
+		__dec_zone_page_state(page, NR_KSM_PAGES_SHARING);
+#endif
 	/* page still mapped by someone else? */
 	if (!atomic_add_negative(-1, &page->_mapcount))
 		return;
