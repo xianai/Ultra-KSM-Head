@@ -328,9 +328,6 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 	rb_link = &mm->mm_rb.rb_node;
 	rb_parent = NULL;
 	pprev = &mm->mmap;
-	retval = ksm_fork(mm, oldmm);
-	if (retval)
-		goto out;
 	retval = khugepaged_fork(mm, oldmm);
 	if (retval)
 		goto out;
@@ -368,6 +365,9 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			goto fail_nomem_anon_vma_fork;
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_next = tmp->vm_prev = NULL;
+#ifdef CONFIG_KSM
+		ksm_vma_add_new(tmp);
+#endif
 		file = tmp->vm_file;
 		if (file) {
 			struct inode *inode = file->f_path.dentry->d_inode;
@@ -549,7 +549,6 @@ void mmput(struct mm_struct *mm)
 
 	if (atomic_dec_and_test(&mm->mm_users)) {
 		exit_aio(mm);
-		ksm_exit(mm);
 		khugepaged_exit(mm); /* must run before exit_mmap */
 		exit_mmap(mm);
 		set_mm_exe_file(mm, NULL);

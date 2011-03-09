@@ -19,7 +19,7 @@
  * current->executable is only used by the procfs.  This allows a dispatch
  * table to check for several different types  of binary formats.  We keep
  * trying until we recognize the file or we run out of supported binary
- * formats. 
+ * formats.
  */
 
 #include <linux/slab.h>
@@ -55,6 +55,7 @@
 #include <linux/fs_struct.h>
 #include <linux/pipe_fs_i.h>
 #include <linux/oom.h>
+#include <linux/ksm.h>
 
 #include <asm/uaccess.h>
 #include <asm/mmu_context.h>
@@ -85,7 +86,7 @@ int __register_binfmt(struct linux_binfmt * fmt, int insert)
 	insert ? list_add(&fmt->lh, &formats) :
 		 list_add_tail(&fmt->lh, &formats);
 	write_unlock(&binfmt_lock);
-	return 0;	
+	return 0;
 }
 
 EXPORT_SYMBOL(__register_binfmt);
@@ -280,6 +281,9 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	if (err)
 		goto err;
 
+#ifdef CONFIG_KSM
+	ksm_vma_add_new(vma);
+#endif
 	err = insert_vm_struct(mm, vma);
 	if (err)
 		goto err;
@@ -1106,7 +1110,7 @@ void setup_new_exec(struct linux_binprm * bprm)
 	   group */
 
 	current->self_exec_id++;
-			
+
 	flush_signal_handlers(current, 0);
 	flush_old_files(current->files);
 }
@@ -1196,8 +1200,8 @@ int check_unsafe_exec(struct linux_binprm *bprm)
 	return res;
 }
 
-/* 
- * Fill the binprm structure from the inode. 
+/*
+ * Fill the binprm structure from the inode.
  * Check permissions, then read the first 128 (BINPRM_BUF_SIZE) bytes
  *
  * This may be called multiple times for binary chains (scripts for example).
