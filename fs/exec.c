@@ -281,9 +281,6 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	if (err)
 		goto err;
 
-#ifdef CONFIG_KSM
-	ksm_vma_add_new(vma);
-#endif
 	err = insert_vm_struct(mm, vma);
 	if (err)
 		goto err;

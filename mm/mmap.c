@@ -1329,9 +1329,6 @@ munmap_back:
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
-#ifdef CONFIG_KSM
-	ksm_vma_add_new(vma);
-#endif
 
 	if (file) {
 		error = -EINVAL;
@@ -1382,6 +1379,9 @@ munmap_back:
 
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 	file = vma->vm_file;
+#ifdef CONFIG_KSM
+	ksm_vma_add_new(vma);
+#endif
 
 	/* Once vma denies write, undo our temporary denial count */
 	if (correct_wcount)
@@ -2028,9 +2028,6 @@ static int __split_vma(struct mm_struct * mm, struct vm_area_struct * vma,
 		new->vm_start = addr;
 		new->vm_pgoff += ((addr - vma->vm_start) >> PAGE_SHIFT);
 	}
-#ifdef CONFIG_KSM
-		ksm_vma_add_new(new);
-#endif
 
 	pol = mpol_dup(vma_policy(vma));
 	if (IS_ERR(pol)) {
@@ -2056,6 +2053,10 @@ static int __split_vma(struct mm_struct * mm, struct vm_area_struct * vma,
 			((addr - new->vm_start) >> PAGE_SHIFT), new);
 	else
 		err = vma_adjust(vma, vma->vm_start, addr, vma->vm_pgoff, new);
+
+#ifdef CONFIG_KSM
+	ksm_vma_add_new(new);
+#endif
 
 	/* Success. */
 	if (!err)
@@ -2292,10 +2293,10 @@ unsigned long do_brk(unsigned long addr, unsigned long len)
 	vma->vm_pgoff = pgoff;
 	vma->vm_flags = flags;
 	vma->vm_page_prot = vm_get_page_prot(flags);
-#ifdef CONFIG_KSM
-		ksm_vma_add_new(vma);
-#endif
 	vma_link(mm, vma, prev, rb_link, rb_parent);
+#ifdef CONFIG_KSM
+	ksm_vma_add_new(vma);
+#endif
 out:
 	perf_event_mmap(vma);
 	mm->total_vm += len >> PAGE_SHIFT;
@@ -2442,10 +2443,10 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 			}
 			if (new_vma->vm_ops && new_vma->vm_ops->open)
 				new_vma->vm_ops->open(new_vma);
+			vma_link(mm, new_vma, prev, rb_link, rb_parent);
 #ifdef CONFIG_KSM
 			ksm_vma_add_new(new_vma);
 #endif
-			vma_link(mm, new_vma, prev, rb_link, rb_parent);
 		}
 	}
 	return new_vma;
@@ -2551,12 +2552,13 @@ int install_special_mapping(struct mm_struct *mm,
 	ret = insert_vm_struct(mm, vma);
 	if (ret)
 		goto out;
-#ifdef CONFIG_KSM
-	ksm_vma_add_new(vma);
-#endif
 	mm->total_vm += len >> PAGE_SHIFT;
 
 	perf_event_mmap(vma);
+
+#ifdef CONFIG_KSM
+	ksm_vma_add_new(vma);
+#endif
 
 	return 0;
 

@@ -365,9 +365,6 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 			goto fail_nomem_anon_vma_fork;
 		tmp->vm_flags &= ~VM_LOCKED;
 		tmp->vm_next = tmp->vm_prev = NULL;
-#ifdef CONFIG_KSM
-		ksm_vma_add_new(tmp);
-#endif
 		file = tmp->vm_file;
 		if (file) {
 			struct inode *inode = file->f_path.dentry->d_inode;
@@ -406,7 +403,9 @@ static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 		__vma_link_rb(mm, tmp, rb_link, rb_parent);
 		rb_link = &tmp->vm_rb.rb_right;
 		rb_parent = &tmp->vm_rb;
-
+#ifdef CONFIG_KSM
+		ksm_vma_add_new(tmp);
+#endif
 		mm->map_count++;
 		retval = copy_page_range(mm, oldmm, mpnt);
 
