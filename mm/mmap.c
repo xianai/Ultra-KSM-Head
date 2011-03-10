@@ -1849,16 +1849,9 @@ static int expand_downwards(struct vm_area_struct *vma,
 
 		error = acct_stack_growth(vma, size, grow);
 		if (!error) {
-#ifdef CONFIG_KSM
-		ksm_remove_vma(vma);
-#endif
 			vma->vm_start = address;
 			vma->vm_pgoff -= grow;
 			perf_event_mmap(vma);
-#ifdef CONFIG_KSM
-		ksm_vma_add_new(vma);
-#endif
-
 		}
 	}
 	vma_unlock_anon_vma(vma);
