@@ -730,8 +730,15 @@ static inline int get_mergeable_page_lock_mmap(struct rmap_item *item)
 		rcu_read_unlock();
 		goto failout_up;
 	}
+
+	/* No need to consider huge page here. */
 	if (item->slot->vma->anon_vma != page_anon_vma(page) ||
 	    vma_page_address(page, item->slot->vma) != get_rmap_addr(item)) {
+		/*
+		 * TODO:
+		 * should we release this item becase of its stale page
+		 * mapping?
+		 */
 		put_page(page);
 		rcu_read_unlock();
 		goto failout_up;
@@ -964,6 +971,7 @@ static int write_protect_page(struct vm_area_struct *vma, struct page *page,
 	if (addr == -EFAULT)
 		goto out;
 
+	BUG_ON(PageTransCompound(page));
 	ptep = page_check_address(page, mm, addr, &ptl, 0);
 	if (!ptep)
 		goto out;
@@ -1047,6 +1055,7 @@ static int replace_page(struct vm_area_struct *vma, struct page *page,
 		goto out;
 
 	pmd = pmd_offset(pud, addr);
+	BUG_ON(pmd_trans_huge(*pmd));
 	if (!pmd_present(*pmd))
 		goto out;
 
@@ -1144,6 +1153,56 @@ static inline int check_collision(struct rmap_item *rmap_item,
 	return err;
 }
 
+static struct page *page_trans_compound_anon(struct page *page)
+{
+	if (PageTransCompound(page)) {
+		struct page *head;
+		head = compound_head(page);
+		/*
+		 * head may be a dangling pointer.
+		 * __split_huge_page_refcount clears PageTail
+		 * before overwriting first_page, so if
+		 * PageTail is still there it means the head
+		 * pointer isn't dangling.
+		 */
+		if (head != page) {
+			smp_rmb();
+			if (!PageTransCompound(page))
+				return NULL;
+		}
+		if (PageAnon(head))
+			return head;
+	}
+	return NULL;
+}
+
+static int page_trans_compound_anon_split(struct page *page)
+{
+	int ret = 0;
+	struct page *transhuge_head = page_trans_compound_anon(page);
+	if (transhuge_head) {
+		/* Get the reference on the head to split it. */
+		if (get_page_unless_zero(transhuge_head)) {
+			/*
+			 * Recheck we got the reference while the head
+			 * was still anonymous.
+			 */
+			if (PageAnon(transhuge_head))
+				ret = split_huge_page(transhuge_head);
+			else
+				/*
+				 * Retry later if split_huge_page run
+				 * from under us.
+				 */
+				ret = 1;
+			put_page(transhuge_head);
+		} else
+			/* Retry later if split_huge_page run from under us. */
+			ret = 1;
+	}
+	return ret;
+}
+
 /**
  * Try to merge a rmap_item.page with a kpage in stable node. kpage must
  * already be a ksm page.
@@ -1168,6 +1227,10 @@ static int try_to_merge_with_ksm_page(struct rmap_item *rmap_item,
 		err = 0;
 		goto out;
 	}
+
+	if (PageTransCompound(page) && page_trans_compound_anon_split(page))
+		goto out;
+	BUG_ON(PageTransCompound(page));
 
 	if (!PageAnon(page) || !PageKsm(kpage))
 		goto out;
@@ -1309,6 +1372,14 @@ static int try_to_merge_two_pages(struct rmap_item *rmap_item,
 
 	if (rmap_item->page == tree_rmap_item->page)
 		goto out;
+
+	if (PageTransCompound(page) && page_trans_compound_anon_split(page))
+		goto out;
+	BUG_ON(PageTransCompound(page));
+
+	if (PageTransCompound(tree_page) && page_trans_compound_anon_split(tree_page))
+		goto out;
+	BUG_ON(PageTransCompound(tree_page));
 
 	if (!PageAnon(page) || !PageAnon(tree_page))
 		goto out;
@@ -2746,7 +2817,7 @@ static struct rmap_item *get_next_rmap_item(struct vma_slot *slot)
 	if (IS_ERR_OR_NULL(page))
 		goto nopage;
 
-	if (!PageAnon(page) || PageTransCompound(page))
+	if (!PageAnon(page) && !page_trans_compound_anon(page))
 		goto putpage;
 
 	flush_anon_page(slot->vma, page, addr);
