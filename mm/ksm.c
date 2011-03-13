@@ -442,7 +442,7 @@ static void drop_anon_vma(struct rmap_item *rmap_item)
 
 	if (atomic_dec_and_lock(&anon_vma->external_refcount, &anon_vma->lock)) {
 		int empty = list_empty(&anon_vma->head);
-		spin_unlock(&anon_vma->lock);
+		anon_vma_unlock(anon_vma);
 		if (empty)
 			anon_vma_free(anon_vma);
 	}
@@ -3945,7 +3945,7 @@ again:
 			struct anon_vma_chain *vmac;
 			struct vm_area_struct *vma;
 
-			spin_lock(&anon_vma->lock);
+			anon_vma_lock(anon_vma);
 			list_for_each_entry(vmac, &anon_vma->head,
 					    same_anon_vma) {
 				vma = vmac->vma;
@@ -3976,7 +3976,7 @@ again:
 					break;
 			}
 
-			spin_unlock(&anon_vma->lock);
+			anon_vma_unlock(anon_vma);
 			if (!mapcount)
 				goto out;
 		}
@@ -4011,7 +4011,7 @@ again:
 			struct anon_vma_chain *vmac;
 			struct vm_area_struct *vma;
 
-			spin_lock(&anon_vma->lock);
+			anon_vma_lock(anon_vma);
 			list_for_each_entry(vmac, &anon_vma->head,
 					    same_anon_vma) {
 				vma = vmac->vma;
@@ -4034,11 +4034,11 @@ again:
 				ret = try_to_unmap_one(page, vma,
 						       address, flags);
 				if (ret != SWAP_AGAIN || !page_mapped(page)) {
-					spin_unlock(&anon_vma->lock);
+					anon_vma_unlock(anon_vma);
 					goto out;
 				}
 			}
-			spin_unlock(&anon_vma->lock);
+			anon_vma_unlock(anon_vma);
 		}
 	}
 	if (!search_new_forks++)
@@ -4073,7 +4073,7 @@ again:
 			struct anon_vma_chain *vmac;
 			struct vm_area_struct *vma;
 
-			spin_lock(&anon_vma->lock);
+			anon_vma_lock(anon_vma);
 			list_for_each_entry(vmac, &anon_vma->head,
 					    same_anon_vma) {
 				vma = vmac->vma;
@@ -4089,11 +4089,11 @@ again:
 
 				ret = rmap_one(page, vma, address, arg);
 				if (ret != SWAP_AGAIN) {
-					spin_unlock(&anon_vma->lock);
+					anon_vma_unlock(anon_vma);
 					goto out;
 				}
 			}
-			spin_unlock(&anon_vma->lock);
+			anon_vma_unlock(anon_vma);
 		}
 	}
 	if (!search_new_forks++)
