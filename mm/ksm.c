@@ -3659,7 +3659,6 @@ static void ksm_do_scan(void)
 	might_sleep();
 
 	rest_pages = 0;
-
 repeat_all:
 	for (i = ksm_scan_ladder_size - 1; i >= 0; i--) {
 		struct scan_rung *rung = &ksm_scan_ladder[i];
@@ -3799,6 +3798,18 @@ busy:
 
 	if (round_finished) {
 		round_update_ladder();
+
+		/*
+		 * A number of pages can hang around indefinitely on per-cpu
+		 * pagevecs, raised page count preventing write_protect_page
+		 * from merging them.  Though it doesn't really matter much,
+		 * it is puzzling to see some stuck in pages_volatile until
+		 * other activity jostles them out, and they also prevented
+		 * LTP's KSM test from succeeding deterministically; so drain
+		 * them here (here rather than on entry to ksm_do_scan(),
+		 * so we don't IPI too often when pages_to_scan is set low).
+		 */
+		lru_add_drain_all();
 
 		/* sync with ksm_remove_vma for rb_erase */
 		ksm_scan_round++;
