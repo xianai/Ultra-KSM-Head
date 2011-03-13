@@ -80,6 +80,7 @@
 #include <linux/random.h>
 #include <linux/math64.h>
 #include <linux/gcd.h>
+#include <linux/freezer.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -2745,7 +2746,7 @@ static struct rmap_item *get_next_rmap_item(struct vma_slot *slot)
 	if (IS_ERR_OR_NULL(page))
 		goto nopage;
 
-	if (!PageAnon(page) || PageTransCompound(*page))
+	if (!PageAnon(page) || PageTransCompound(page))
 		goto putpage;
 
 	flush_anon_page(slot->vma, page, addr);
@@ -3624,7 +3625,7 @@ repeat_all:
 
 		rung->pages_to_scan += rest_pages;
 		rest_pages = 0;
-		while (rung->pages_to_scan) {
+		while (rung->pages_to_scan && likely(!freezing(current))) {
 			rung->pages_to_scan--;
 
 cleanup:
@@ -3869,6 +3870,7 @@ static void ksm_enter_all_slots(void)
 
 static int ksm_scan_thread(void *nothing)
 {
+	set_freezable();
 	set_user_nice(current, 5);
 
 	while (!kthread_should_stop()) {
@@ -3879,11 +3881,13 @@ static int ksm_scan_thread(void *nothing)
 		}
 		mutex_unlock(&ksm_thread_mutex);
 
+		try_to_freeze();
+
 		if (ksmd_should_run()) {
 			schedule_timeout_interruptible(ksm_sleep_jiffies);
 			ksm_sleep_times++;
 		} else {
-			wait_event_interruptible(ksm_thread_wait,
+			wait_event_freezable(ksm_thread_wait,
 				ksmd_should_run() || kthread_should_stop());
 		}
 	}
