@@ -436,16 +436,11 @@ static inline void free_tree_node(struct tree_node *node)
 	kmem_cache_free(tree_node_cache, node);
 }
 
-static void drop_anon_vma(struct rmap_item *rmap_item)
+static void ksm_drop_anon_vma(struct rmap_item *rmap_item)
 {
 	struct anon_vma *anon_vma = rmap_item->anon_vma;
 
-	if (atomic_dec_and_lock(&anon_vma->external_refcount, &anon_vma->root->lock)) {
-		int empty = list_empty(&anon_vma->head);
-		anon_vma_unlock(anon_vma);
-		if (empty)
-			anon_vma_free(anon_vma);
-	}
+	drop_anon_vma(anon_vma);
 }
 
 
@@ -471,7 +466,7 @@ static void remove_node_from_stable_tree(struct stable_node *stable_node,
 					     &node_vma->rmap_hlist, hlist) {
 				ksm_pages_sharing--;
 
-				drop_anon_vma(rmap_item);
+				ksm_drop_anon_vma(rmap_item);
 				rmap_item->address &= PAGE_MASK;
 			}
 			free_node_vma(node_vma);
@@ -607,7 +602,7 @@ static inline void remove_rmap_item_from_tree(struct rmap_item *rmap_item)
 			ksm_pages_sharing--;
 
 
-		drop_anon_vma(rmap_item);
+		ksm_drop_anon_vma(rmap_item);
 	} else if (rmap_item->address & UNSTABLE_FLAG) {
 		/*
 		 * Usually ksmd can and must skip the rb_erase, because
@@ -2075,7 +2070,7 @@ static void hold_anon_vma(struct rmap_item *rmap_item,
 			  struct anon_vma *anon_vma)
 {
 	rmap_item->anon_vma = anon_vma;
-	atomic_inc(&anon_vma->external_refcount);
+	get_anon_vma(anon_vma);
 }
 
 
