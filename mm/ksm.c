@@ -2745,7 +2745,7 @@ static struct rmap_item *get_next_rmap_item(struct vma_slot *slot)
 	if (IS_ERR_OR_NULL(page))
 		goto nopage;
 
-	if (!PageAnon(page))
+	if (!PageAnon(page) || PageTransCompound(*page))
 		goto putpage;
 
 	flush_anon_page(slot->vma, page, addr);
